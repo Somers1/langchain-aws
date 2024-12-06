@@ -622,6 +622,11 @@ class BedrockBase(BaseLanguageModel, ABC):
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
 
+    explicit_prompt_caching: Optional[str] = None
+    """Whether to explicitly enable or disable prompt caching via request parameters.
+    If enabled, each request will have explicitPromptCaching='enabled' included.
+    If set to None (default), no explicitPromptCaching parameter is included."""
+
     @property
     def lc_secrets(self) -> Dict[str, str]:
         return {
@@ -822,6 +827,9 @@ class BedrockBase(BaseLanguageModel, ABC):
             )
             if self.guardrails.get("trace"):  # type: ignore[union-attr]
                 request_options["trace"] = "ENABLED"
+
+        if self.explicit_prompt_caching:
+            request_options["explicitPromptCaching"] = self.explicit_prompt_caching
 
         try:
             response = self.client.invoke_model(**request_options)
