@@ -769,6 +769,32 @@ class BedrockBase(BaseLanguageModel, ABC):
                 and 'guardrailVersion' keys."
             ) from e
 
+    def _prepare_request_options(self, body, accept=None, content_type=None):
+        if accept is None:
+            accept = "application/json"
+        if content_type is None:
+            content_type = "application/json"
+        request_options = {
+            "body": body,
+            "modelId": self.model_id,
+            "accept": accept,
+            "contentType": content_type,
+        }
+
+        if self._guardrails_enabled:
+            request_options["guardrailIdentifier"] = self.guardrails.get(  # type: ignore[union-attr]
+                "guardrailIdentifier", ""
+            )
+            request_options["guardrailVersion"] = self.guardrails.get(  # type: ignore[union-attr]
+                "guardrailVersion", ""
+            )
+            if self.guardrails.get("trace"):  # type: ignore[union-attr]
+                request_options["trace"] = "ENABLED"
+
+        if self.explicit_prompt_caching:
+            request_options["explicitPromptCaching"] = self.explicit_prompt_caching
+        return request_options
+
     def _prepare_input_and_invoke(
         self,
         prompt: Optional[str] = None,
@@ -808,29 +834,7 @@ class BedrockBase(BaseLanguageModel, ABC):
                 temperature=self.temperature,
             )
         body = json.dumps(input_body)
-        accept = "application/json"
-        contentType = "application/json"
-
-        request_options = {
-            "body": body,
-            "modelId": self.model_id,
-            "accept": accept,
-            "contentType": contentType,
-        }
-
-        if self._guardrails_enabled:
-            request_options["guardrailIdentifier"] = self.guardrails.get(  # type: ignore[union-attr]
-                "guardrailIdentifier", ""
-            )
-            request_options["guardrailVersion"] = self.guardrails.get(  # type: ignore[union-attr]
-                "guardrailVersion", ""
-            )
-            if self.guardrails.get("trace"):  # type: ignore[union-attr]
-                request_options["trace"] = "ENABLED"
-
-        if self.explicit_prompt_caching:
-            request_options["explicitPromptCaching"] = self.explicit_prompt_caching
-
+        request_options = self._prepare_request_options(body=body)
         try:
             response = self.client.invoke_model(**request_options)
 
@@ -948,24 +952,7 @@ class BedrockBase(BaseLanguageModel, ABC):
                     temperature=self.temperature,
                 )
         body = json.dumps(input_body)
-
-        request_options = {
-            "body": body,
-            "modelId": self.model_id,
-            "accept": "application/json",
-            "contentType": "application/json",
-        }
-
-        if self._guardrails_enabled:
-            request_options["guardrailIdentifier"] = self.guardrails.get(  # type: ignore[union-attr]
-                "guardrailIdentifier", ""
-            )
-            request_options["guardrailVersion"] = self.guardrails.get(  # type: ignore[union-attr]
-                "guardrailVersion", ""
-            )
-            if self.guardrails.get("trace"):  # type: ignore[union-attr]
-                request_options["trace"] = "ENABLED"
-
+        request_options = self._prepare_request_options(body=body)
         try:
             response = self.client.invoke_model_with_response_stream(**request_options)
 
@@ -1033,15 +1020,10 @@ class BedrockBase(BaseLanguageModel, ABC):
                 temperature=self.temperature,
             )
         body = json.dumps(input_body)
-
+        request_options = self._prepare_request_options(body=body)
         response = await asyncio.get_running_loop().run_in_executor(
             None,
-            lambda: self.client.invoke_model_with_response_stream(
-                body=body,
-                modelId=self.model_id,
-                accept="application/json",
-                contentType="application/json",
-            ),
+            lambda: self.client.invoke_model_with_response_stream(**request_options),
         )
 
         async for chunk in LLMInputOutputAdapter.aprepare_output_stream(
